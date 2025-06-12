@@ -39,7 +39,6 @@ class libra{
   double DMSmin;
   double DMSmax;
   
-  unsigned long long int acceptCount = 1, totCount = 1;
   double sDM221 = 1e-6;
   double sDM231 = 3e-6;
   double sT23 = 0.0095;
@@ -59,12 +58,45 @@ class libra{
   std::uniform_real_distribution<double> udist;
 
   libra();
+  
+  struct MCChain {
+  public:
+    double current[8];
+    double proposal[8];
+    unsigned long long int acceptCount, totCount;
+    
+    MCChain(double* currptr)
+      : acceptCount(1), totCount(1)
+    {
+      for (int i = 0; i < 8; ++i) {
+	current[i] = currptr[i];
+      }
+    }
+
+    double getRatio(){
+      if(totCount == 0) return 0;
+      return static_cast<double>(acceptCount)/totCount;
+    }
+  };
+   
   double getChiSquare(double,double,double,double,double,double);
-  void proposalFunc(double*,double*);
-  void MH(double*, double*);
-  double getRatio();
+  void proposalFunc(MCChain*);
+  double MH(MCChain*);
+
+
+  std::vector<MCChain*> MCS;
+
+  std::vector<double> chis;
+
+  double Uchain = 0;
+  double Ucheck = 0;
+
+  void initOnce();
+  void MonteCarlo();
+  
+  
   ~libra();
-
-
+  
+  
 
 };

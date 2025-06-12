@@ -6,6 +6,7 @@
 #include "TGraph.h"
 #include <numeric>
 
+static constexpr double deg2Rad = M_PI/180; 
 
 double calMean(const std::vector<double>& vec){
   return std::accumulate(vec.begin(), vec.end(), 0.0) / vec.size();
@@ -28,7 +29,7 @@ std::vector<double> calDCPMeanStd(const std::vector<double>& vec){
   double rad = 0, sinSum = 0, cosSum = 0;
   size_t vecSize = vec.size();
   for(size_t i = 0; i < vecSize; i++){
-    rad = vec[i]*(M_PI/180);
+    rad = vec[i]*deg2Rad;
     sinSum += std::sin(rad);
     cosSum += std::cos(rad);
   }
@@ -38,10 +39,20 @@ std::vector<double> calDCPMeanStd(const std::vector<double>& vec){
   sinSum = sinSum/vecSize;
   cosSum = cosSum/vecSize;
 
-  std::vector<double> v =  {std::atan2(sinSum,cosSum)*(180/M_PI), std::sqrt(-2*std::log(Rroot))};
+  std::vector<double> v =  {std::atan2(sinSum,cosSum)/deg2Rad, std::sqrt(-2*std::log(Rroot))/deg2Rad};
 
   return v;
 }
+
+double dcpDIFF(double currVal, double meanVal){
+    double diff = currVal - meanVal;
+    while (diff > 180) diff -= 360;
+    while (diff < -180) diff += 360;
+    return diff;
+}
+
+
+
 
 int main(int argc, char** argv){
   auto start = std::chrono::high_resolution_clock::now();
@@ -50,10 +61,11 @@ int main(int argc, char** argv){
   
   libra obj1;
 
-  double current[6] = {2e-4,2.5*1e-3,0.30,0.022,0.4,-175};
-  double proposal[6];
+  obj1.initOnce();
 
   unsigned long long int totIters = (2 << 20);
+
+  std::cout << totIters << "\n";
 
 
   /*int numSize = totIters/1000;
@@ -70,7 +82,9 @@ int main(int argc, char** argv){
   currt13.reserve(totIters);
   currdcp.reserve(totIters);
 
-  //unsigned long long int prevAcc, nextAcc = 0;  
+  //unsigned long long int prevAcc, nextAcc = 0;
+
+  //std::cout << obj1.MCS[7]->current[0];
   for(unsigned long long int iterations = 0; iterations < totIters ; iterations++){
     
     /*if(iterations%1000 == 0){
@@ -81,15 +95,17 @@ int main(int argc, char** argv){
       obj1.totCount = 0;
       }*/
 
-    currdm221.emplace_back(current[0]);
-    currdm231.emplace_back(current[1]);
-    currt12.emplace_back(current[2]);
-    currt13.emplace_back(current[3]);
-    currt23.emplace_back(current[4]);
-    currdcp.emplace_back(current[5]);
+    std::cout << iterations << "\n";
+
+    currdm221.push_back(obj1.MCS[0]->current[0]);
+    currdm231.push_back(obj1.MCS[0]->current[1]);
+    currt12.push_back(obj1.MCS[0]->current[2]);
+    currt13.push_back(obj1.MCS[0]->current[3]);
+    currt23.push_back(obj1.MCS[0]->current[4]);
+    currdcp.push_back(obj1.MCS[0]->current[5]);
+
     
-    obj1.proposalFunc(current,proposal);
-    obj1.MH(current,proposal);
+    obj1.MonteCarlo();
     
   }
 
@@ -140,7 +156,7 @@ int main(int argc, char** argv){
       act23 += ((currt23[iters]-t23mean)*(currt23[iters-τ]-t23mean))/(t23var);
       act13 += ((currt13[iters]-t13mean)*(currt13[iters-τ]-t13mean))/(t13var);
       act12 += ((currt12[iters]-t12mean)*(currt12[iters-τ]-t12mean))/(t12var);
-      acdcp += ((currdcp[iters]-dcpmean)*(currdcp[iters-τ]-dcpmean))/(dcpstd*dcpstd);
+      acdcp += (dcpDIFF(currdcp[iters],dcpmean)*dcpDIFF(currdcp[iters-τ],dcpmean))/(dcpstd*dcpstd);
 
       //std::cout << acdm221 << " " << (currdm221[iters]-dm221mean)/std::sqrt(dm221var) << " " << (currdm221[iters-τ]-dm221mean)/std::sqrt(dm221var) << "\n";
       
@@ -148,15 +164,17 @@ int main(int argc, char** argv){
 
     //std::cout << acdm221 << " " <<acdm221*normDiv <<"\n";
  
-    tgdm221->SetPoint(τ,τ,acdm221*normDiv);
-    tgdm231->SetPoint(τ,τ,acdm231*normDiv);
-    tgt23->SetPoint(τ,τ,act23*normDiv);
-    tgt13->SetPoint(τ,τ,act13*normDiv);
-    tgt12->SetPoint(τ,τ,act12*normDiv);
-    tgdcp->SetPoint(τ,τ,acdcp*normDiv);
+    tgdm221->AddPoint(τ,acdm221*normDiv);
+    tgdm231->AddPoint(τ,acdm231*normDiv);
+    tgt23->AddPoint(τ,act23*normDiv);
+    tgt13->AddPoint(τ,act13*normDiv);
+    tgt12->AddPoint(τ,act12*normDiv);
+    tgdcp->AddPoint(τ,acdcp*normDiv);
 
     
-    //std::cout << "\n";
+    /*if(τ == 1){
+    std::cout << acdm221*normDiv << " " << acdm231*normDiv << " " <<act23*normDiv << " " <<act13*normDiv << " " <<act12*normDiv << " " << acdcp*normDiv << "\n";
+    }*/
     
  }
 
@@ -181,6 +199,8 @@ int main(int argc, char** argv){
   tgt13->SetLineWidth(2);
   tgt12->SetLineWidth(2);
   tgdcp->SetLineWidth(2);
+
+  //std::cout << tgdm221->GetPointY(0) << " " << tgdm231->GetPointY(0) << " " << tgt23->GetPointY(0) << " " << tgt13->GetPointY(0) << " " << tgt12->GetPointY(0) << " " << tgdcp->GetPointY(0) << "\n"; 
 
   
   
@@ -213,6 +233,7 @@ int main(int argc, char** argv){
   delete tgt12;
   delete tgdcp;
   delete c1;
+  //delete chain1;
   
 
   auto end = std::chrono::high_resolution_clock::now();

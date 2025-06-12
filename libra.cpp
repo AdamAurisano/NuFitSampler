@@ -121,40 +121,41 @@ double libra::getChiSquare(double dm221,double dm231,double t12,double t13,doubl
   
 }
 
-void libra::proposalFunc(double* current, double* prop){
+void libra::proposalFunc(MCChain* chain){
   //double dm221,double dm231,double t12,double t13,double t23,double dcpval
 
   
-  std::normal_distribution<double> dm221R(current[0],sDM221);
-  std::normal_distribution<double> dm231R(current[1],sDM231);
-  std::normal_distribution<double> T23R(current[4],sT23);
-  std::normal_distribution<double> T12R(current[2],sT12);
-  std::normal_distribution<double> T13R(current[3],sT13);
-  std::normal_distribution<double> DCPR(current[5],sDCP);
   
-  prop[0] = dm221R(gen);
-  prop[1] = dm231R(gen);
-  prop[4] = T23R(gen);
-  prop[2] = T12R(gen);
-  prop[3] = T13R(gen);
+  std::normal_distribution<double> dm221R(chain->current[0],sDM221);
+  std::normal_distribution<double> dm231R(chain->current[1],sDM231);
+  std::normal_distribution<double> T23R(chain->current[4],sT23);
+  std::normal_distribution<double> T12R(chain->current[2],sT12);
+  std::normal_distribution<double> T13R(chain->current[3],sT13);
+  std::normal_distribution<double> DCPR(chain->current[5],sDCP);
+  
+  chain->proposal[0] = dm221R(gen);
+  chain->proposal[1] = dm231R(gen);
+  chain->proposal[4] = T23R(gen);
+  chain->proposal[2] = T12R(gen);
+  chain->proposal[3] = T13R(gen);
 
   TmpDCP = DCPR(gen);
   double add = 180;
   if(TmpDCP < 0) add = -1*add;
   modf((TmpDCP+add)/360.0, ptr);
-  prop[5] = TmpDCP - (360*ipart);
+  chain->proposal[5] = TmpDCP - (360*ipart);
 
   //std::cout << TmpDCP << " " << prop[5] << "\n";
   
 }
 
-void libra::MH(double* current, double* prop){
-  totCount++;
+double libra::MH(MCChain* chain){
+  chain->totCount++;
   
-  currentChi = getChiSquare(current[0],current[1],current[2],current[3],current[4],current[5]);
-  propChi = getChiSquare(prop[0],prop[1],prop[2],prop[3],prop[4],prop[5]);
+  currentChi = getChiSquare(chain->current[0],chain->current[1],chain->current[2],chain->current[3],chain->current[4],chain->current[5]);
+  propChi = getChiSquare(chain->proposal[0],chain->proposal[1],chain->proposal[2],chain->proposal[3],chain->proposal[4],chain->proposal[5]);
 
-  if(propChi < 0) return;
+  if(propChi < 0) return currentChi;
   
   check = std::exp(-propChi + currentChi);
   U = udist(gen);
@@ -162,18 +163,82 @@ void libra::MH(double* current, double* prop){
   if(U < check){
     
     for(size_t i = 0; i < 6; i++){
-      current[i] = prop[i];
+      chain->current[i] = chain->proposal[i];
     }
-    acceptCount++;
-    
-  }
+    chain->acceptCount++;
 
-  return; 
+
+    return propChi;
+  }
+  //std::cout << "check\n";
+  return currentChi; 
 }
 
-double libra::getRatio(){
-  if(totCount == 0) return 0;
-  return static_cast<double>(acceptCount)/totCount;
+void libra::initOnce(){
+  //MCS.resize(8);
+  chis.resize(8);
+  
+  double posNOp90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.625,90};
+  double negNOp90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.375,90};
+  double posIOp90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.625,90};
+  double negIOp90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.375,90};
+  double posNOn90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.625,-90};
+  double negNOn90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.375,-90};
+  double posIOn90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.625,-90};
+  double negIOn90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.375,-90};
+
+  //std::cout << getChiSquare(posNOp90list[0],posNOp90list[1],posNOp90list[2],posNOp90list[3],posNOp90list[4],posNOp90list[5]);
+
+  /*MCChain posNOp90(posNOp90list),negNOp90(negNOp90list),posIOp90(posIOp90list),
+    negIOp90(negIOp90list),posNOn90(posNOn90list),negNOn90(negNOn90list),
+    posIOn90(posIOn90list),negIOn90(negIOn90list);*/
+
+  MCS.push_back(new MCChain(posNOp90list));
+  MCS.push_back(new MCChain(negNOp90list));
+  MCS.push_back(new MCChain(posIOp90list));
+  MCS.push_back(new MCChain(negIOp90list));
+  MCS.push_back(new MCChain(posNOn90list));
+  MCS.push_back(new MCChain(negNOn90list));
+  MCS.push_back(new MCChain(posIOn90list));
+  MCS.push_back(new MCChain(negIOn90list));
+
+}
+
+void libra::MonteCarlo(){
+  
+  //std::cout << MCS.size() << "\n";
+  
+  for(size_t i = 0; i < 8; i++){
+    proposalFunc(MCS[i]);
+    chis[i] = MH(MCS[i]);
+  }
+
+  //std::cout << "check1\n";
+
+
+  /*if(chis[0] < 0 && chis[1] < 0 && chis[2] < 0 && chis[3] < 0 && chis[4] < 0 && chis[5] < 0 && chis[6] < 0 && chis[7] < 0) {
+    std::cout << chis[0] << chis[1] << chis[2] << chis[3] << chis[4] << chis[5] << chis[6] << chis[7] << "\n";
+
+    return;
+    }*/
+
+  //std::cout << "check2\n";
+
+  for(size_t i = 7; i > 0; i--){
+    //if(chis[i] < 0 || chis[0] < 0) continue;
+
+    Ucheck = std::exp(-chis[i] + chis[0]);
+    Uchain = udist(gen);
+
+    if(Uchain < Ucheck){
+      std::swap(MCS[0],MCS[i]);      
+    }
+  }
+
+  //std::cout << "check3\n";
+
+  return;
+  
 }
 
 libra::~libra(){
@@ -187,6 +252,10 @@ libra::~libra(){
     delete dfI1;
     delete dfI4;
     delete dfI17;
+
+    for(size_t i = 0; i < MCS.size(); i++){
+      delete MCS[i];
+    }
 }
 
 
