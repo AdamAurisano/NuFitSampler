@@ -1,0 +1,54 @@
+#pragma once
+#include <string>
+#include <vector>
+#include "TKDTree.h"
+
+class NuFuncs {
+  
+public:
+  
+  std::vector<double> xData = {};
+  std::vector<double> yData = {};
+  std::vector<double> zData = {};
+  std::vector<double> chiSq = {};
+  std::vector<std::string> column_names = {};
+  
+  TKDTreeID* tree = nullptr;
+  double* datax = nullptr;
+  double* datay = nullptr;
+  double* dataz = nullptr;
+
+  double xmin = 0.25;
+  double ymin = 0.2;
+  double zmin = -180;
+  double xdist = 0.5;
+  double ydist = 6.8;
+  double zdist = 355;
+
+  std::vector<double> dcp = {-180,-175,-170,-165,-160,-155,-150,-145,-140,-135,-130,-125,-120,-115,-110,-105,-100,-95,-90,-85,-80,-75,-70,-65,-60,-55,-50,-45,-40,-35,-30,-25,-20,-15,-10,-5,-0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175};
+
+  int dSize = dcp.size();
+  
+  NuFuncs();
+  
+   double read(int index){
+     return dcp[(index%dSize + dSize)%dSize];
+   }
+  
+  void putIntoDF(std::string file_addy, int secnum);
+  void remDCP();
+  void multiDimFit();
+  void triInterp();
+  void twoDInterp();
+  void otDI();
+  void scale();
+  void scale(double*);
+  void kDTree();
+  double IDW(double*);
+  
+  
+  
+  ~NuFuncs();
+
+
+};

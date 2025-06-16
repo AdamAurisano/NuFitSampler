@@ -1,0 +1,90 @@
+#include "NuFuncs.h"
+#include <iostream>
+#include <chrono>
+#include "TGraph2D.h"
+#include "TCanvas.h"
+#include "TApplication.h"
+#include "TH2D.h"
+#include <TGraph.h>
+
+int main(int argc, char** argv){
+
+  auto start = std::chrono::high_resolution_clock::now();
+  
+  NuFuncs df1;
+  
+  df1.putIntoDF("normalOrder.txt",1);
+  df1.kDTree();
+  
+  /*double dp[3] = {0.25,0.2,-180};
+  double dp1[3] = {0.25,0.2,-172};
+
+  
+  std::cout << df1.IDW(dp) << " " << df1.IDW(dp1) << "\n";*/
+
+  int nbinx = 25;
+  int nbiny = 25;
+  double xlow = 0.26;
+  double xhigh = 0.74;
+  double ylow = 2;
+  double yhigh = 3.2;
+
+  TH2D* TDplot = new TH2D("TDPlot","T23 vs DMA normorder",nbinx,xlow,xhigh,nbiny,ylow,yhigh);
+
+  double* xbinList = new double[nbinx];
+  double* ybinList = new double[nbiny];  
+
+  for(int i = 0; i < nbinx; i++){
+    xbinList[i] = TDplot->GetXaxis()->GetBinCenter(i+1);
+  }
+  for(int i = 0; i < nbiny; i++){
+    ybinList[i] = TDplot->GetYaxis()->GetBinCenter(i+1);
+  }
+
+  float spacing = 5;
+  
+  for(int i = 0; i < nbinx; i++){
+    for(int j = 0; j < nbiny; j++){
+      
+      double DCP = -180;
+      double dp[3] = {xbinList[i],ybinList[j],0};
+      double minChi = 1000000;
+      double ChiSq = 0;
+      
+      while(DCP <= 180){
+	dp[2] = DCP;
+	ChiSq = df1.IDW(dp);
+	if(minChi > ChiSq ) minChi = ChiSq;
+	
+	DCP += spacing;
+      }
+      //std::cout << minChi << " ";
+      TDplot->SetBinContent(i + 1, j + 1, minChi);
+    }
+    //std::cout << "\n";
+  }
+  
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  
+  std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+  
+  delete xbinList;
+  delete ybinList;
+  
+  TApplication app("app", &argc, argv);
+
+  Double_t w = 600;
+  Double_t h = 600;
+  TCanvas* c1 = new TCanvas("Graph","Optimal",w,h);
+  c1->SetWindowSize(w + (w - c1->GetWw()), h + (h - c1->GetWh()));
+  TDplot->Draw("COLZ");
+  TDplot->GetXaxis()->SetTitle("T23");
+  TDplot->GetYaxis()->SetTitle("DMA");
+  c1->Update();
+  app.Run();
+  
+  
+   
+  return 0;
+}

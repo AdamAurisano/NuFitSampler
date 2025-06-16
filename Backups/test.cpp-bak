@@ -1,0 +1,72 @@
+#include "NuFuncs.h"
+#include <iostream>
+#include <chrono>
+#include "TGraph2D.h"
+#include "TCanvas.h"
+#include "TApplication.h"
+#include "TH2D.h"
+#include <TGraph.h>
+
+int main(int argc, char** argv){
+  
+  NuFuncs df1;
+  
+  df1.putIntoDF("normalOrder.txt",1);
+  //df1.twoDInterp();
+  //df1.otDI();
+  //df1.multiDimFit();
+  int nums = 5;
+  //float powers[nums] = {12,16,20,24,28};
+
+  //best power 12
+  //float time
+  //int kNNs[20] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}; best KNN = 3
+  //float powers[2] = {1,2};
+  //float kNNs[2] = {10,20};
+  df1.kDTree();
+  double avgE[nums] = {};
+    
+  float tim[nums] = {};
+  float tims = 0;
+
+  for(int i = 0; i < nums; i++){
+    auto start = std::chrono::high_resolution_clock::now();
+    avgE[i]= df1.IDW(3,12);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    tim[i] = duration.count();
+    tims += tim[i];
+    std::cout << avgE[i] << " " << tim[i]  << "\n";
+  }
+
+  std::cout << "AVG TIME " << tims/nums << "\n";
+  
+  
+  
+  
+  // std::cout << "Execution time: " << duration.count() << " milliseconds" << std::endl;
+
+  /*TApplication app("app", &argc, argv);
+  TGraph* g = new TGraph(nums);
+
+  for(int i = 0; i < nums; i++){
+    g->SetPoint(i,tim[i],avgE[i]);
+  }
+
+  Double_t w = 600;
+  Double_t h = 600;
+  TCanvas* c1 = new TCanvas("Graph","Optimal",w,h);
+  c1->SetWindowSize(w + (w - c1->GetWw()), h + (h - c1->GetWh()));
+  g->SetMarkerStyle(20);
+  g->SetMarkerSize(2);
+  g->Draw("ALP");
+  g->GetXaxis()->SetTitle("Time");
+  g->GetYaxis()->SetTitle("avgE");
+  //g->GetHistogram()->GetZaxis()->SetTitle("Avg Error");
+  c1->Update();
+  app.Run();*/
+  
+  
+   
+  return 0;
+}
