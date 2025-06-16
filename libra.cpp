@@ -124,7 +124,7 @@ double libra::getChiSquare(double dm221,double dm231,double t12,double t13,doubl
 void libra::proposalFunc(MCChain* chain){
   //double dm221,double dm231,double t12,double t13,double t23,double dcpval
 
-  
+  //{7.5e-5,2.5e-3,0.3,0.022,0.5,0}
   
   std::normal_distribution<double> dm221R(chain->current[0],sDM221);
   std::normal_distribution<double> dm231R(chain->current[1],sDM231);
@@ -177,15 +177,18 @@ double libra::MH(MCChain* chain){
 void libra::initOnce(){
   //MCS.resize(8);
   chis.resize(8);
+
+
+  //{7.5e-5,2.5e-3,0.3,0.022,0.5,0}
   
-  double posNOp90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.625,90};
-  double negNOp90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.375,90};
-  double posIOp90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.625,90};
-  double negIOp90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.375,90};
-  double posNOn90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.625,-90};
-  double negNOn90list[6] = {2e-4,2.5*1e-3,0.30,0.022,0.375,-90};
-  double posIOn90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.625,-90};
-  double negIOn90list[6] = {2e-4,-5.4e-3,0.30,0.022,0.375,-90};
+  double posNOp90list[6] = {7.5e-5, 2.5e-3, 0.30, 0.022, 0.54, 90};
+  double negNOp90list[6] = {7.5e-5, 2.5e-3, 0.30, 0.022, 0.46, 90};
+  double posIOp90list[6] = {7.5e-5, -2.5e-3, 0.30, 0.022,0.54, 90};
+  double negIOp90list[6] = {7.5e-5, -2.5e-3, 0.30, 0.022,0.46,90};
+  double posNOn90list[6] = {7.5e-5, 2.5e-3, 0.30, 0.022,0.54,-90};
+  double negNOn90list[6] = {7.5e-5, 2.5e-3, 0.30, 0.022,0.46,-90};
+  double posIOn90list[6] = {7.5e-5, -2.5e-3, 0.30, 0.022,0.54,-90};
+  double negIOn90list[6] = {7.5e-5, -2.5e-3, 0.30, 0.022,0.46,-90};
 
   //std::cout << getChiSquare(posNOp90list[0],posNOp90list[1],posNOp90list[2],posNOp90list[3],posNOp90list[4],posNOp90list[5]);
 
@@ -216,16 +219,15 @@ void libra::MonteCarlo(){
   //std::cout << "check1\n";
 
 
-  /*if(chis[0] < 0 && chis[1] < 0 && chis[2] < 0 && chis[3] < 0 && chis[4] < 0 && chis[5] < 0 && chis[6] < 0 && chis[7] < 0) {
+  if(chis[0] < 0 && chis[1] < 0 && chis[2] < 0 && chis[3] < 0 && chis[4] < 0 && chis[5] < 0 && chis[6] < 0 && chis[7] < 0) {
     std::cout << chis[0] << chis[1] << chis[2] << chis[3] << chis[4] << chis[5] << chis[6] << chis[7] << "\n";
-
     return;
-    }*/
+  }
 
   //std::cout << "check2\n";
 
   for(size_t i = 7; i > 0; i--){
-    //if(chis[i] < 0 || chis[0] < 0) continue;
+    if(chis[i] < 0 || chis[0] < 0) continue;
 
     Ucheck = std::exp(-chis[i] + chis[0]);
     Uchain = udist(gen);

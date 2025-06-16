@@ -5,54 +5,8 @@
 #include "TFile.h"
 #include "TGraph.h"
 #include <numeric>
-
-static constexpr double deg2Rad = M_PI/180; 
-
-double calMean(const std::vector<double>& vec){
-  return std::accumulate(vec.begin(), vec.end(), 0.0) / vec.size();
-}
-
-double calVar(const std::vector<double>& vec) {
-  if (vec.size() <= 1) return 0.0;
-  double weight = 1.0/(vec.size() - 1);
-  double mean = calMean(vec);
-  double var_sum = 0;
-  for(size_t i = 0; i < vec.size(); i++){
-    var_sum += std::pow(vec[i]-mean,2)*weight;
-    //std::cout << var_sum << "\n";
-  }
-
-  return var_sum;
-}
-
-std::vector<double> calDCPMeanStd(const std::vector<double>& vec){
-  double rad = 0, sinSum = 0, cosSum = 0;
-  size_t vecSize = vec.size();
-  for(size_t i = 0; i < vecSize; i++){
-    rad = vec[i]*deg2Rad;
-    sinSum += std::sin(rad);
-    cosSum += std::cos(rad);
-  }
-  double Rroot = std::sqrt(sinSum*sinSum + cosSum*cosSum);
-  Rroot = Rroot/vecSize;
-  
-  sinSum = sinSum/vecSize;
-  cosSum = cosSum/vecSize;
-
-  std::vector<double> v =  {std::atan2(sinSum,cosSum)/deg2Rad, std::sqrt(-2*std::log(Rroot))/deg2Rad};
-
-  return v;
-}
-
-double dcpDIFF(double currVal, double meanVal){
-    double diff = currVal - meanVal;
-    while (diff > 180) diff -= 360;
-    while (diff < -180) diff += 360;
-    return diff;
-}
-
-
-
+#include "TH2D.h"
+#include "TTree.h"
 
 int main(int argc, char** argv){
   auto start = std::chrono::high_resolution_clock::now();
@@ -63,17 +17,10 @@ int main(int argc, char** argv){
 
   obj1.initOnce();
 
-  unsigned long long int totIters = (2 << 20);
+  unsigned long long int totIters = (2 << 15);
 
   std::cout << totIters << "\n";
 
-
-  /*int numSize = totIters/1000;
-  
-  std::vector<double> errVals;
-  errVals.reserve(numSize);
-  double errVal = 0;*/
-  
   std::vector<double> currdm221, currdm231, currt23, currt12, currt13, currdcp;
   currdm221.reserve(totIters);
   currdm231.reserve(totIters);
@@ -82,191 +29,161 @@ int main(int argc, char** argv){
   currt13.reserve(totIters);
   currdcp.reserve(totIters);
 
-  //unsigned long long int prevAcc, nextAcc = 0;
+  double dcpVal = 0;
 
-  //std::cout << obj1.MCS[7]->current[0];
   for(unsigned long long int iterations = 0; iterations < totIters ; iterations++){
     
-    /*if(iterations%1000 == 0){
-      errVal = obj1.getRatio();
-      std::cout << errVal << "\n";
-      errVals.emplace_back(errVal);
-      obj1.acceptCount = 0;
-      obj1.totCount = 0;
-      }*/
 
-    std::cout << iterations << "\n";
+    //std::cout << iterations << "\n";
 
-    currdm221.push_back(obj1.MCS[0]->current[0]);
-    currdm231.push_back(obj1.MCS[0]->current[1]);
-    currt12.push_back(obj1.MCS[0]->current[2]);
-    currt13.push_back(obj1.MCS[0]->current[3]);
-    currt23.push_back(obj1.MCS[0]->current[4]);
-    currdcp.push_back(obj1.MCS[0]->current[5]);
+    if(iterations % 100 == 0) {
+      currdm221.push_back(obj1.MCS[0]->current[0]);
+      currdm231.push_back(obj1.MCS[0]->current[1]);
+      currt12.push_back(obj1.MCS[0]->current[2]);
+      currt13.push_back(obj1.MCS[0]->current[3]);
+      currt23.push_back(obj1.MCS[0]->current[4]);
+      
+      dcpVal = obj1.MCS[0]->current[5];
+      dcpVal = (dcpVal < 0) ? dcpVal+360 : dcpVal;
+      currdcp.push_back(dcpVal);
+    }
 
+    if(iterations % 10000 == 0){
+      std::cout << (static_cast<double>(iterations)/totIters)*100 << "%\n";
+    }
+
+    
     
     obj1.MonteCarlo();
     
   }
-
-  //std::cout << obj1.getRatio() << "\n";
-  
-  double dm221mean = calMean(currdm221);
-  double dm221var = calVar(currdm221);
-
-  double dm231mean = calMean(currdm231);
-  double dm231var = calVar(currdm231);
-
-  double t23mean = calMean(currt23);
-  double t23var = calVar(currt23);
-
-  double t13mean = calMean(currt13);
-  double t13var = calVar(currt13);
-
-  double t12mean = calMean(currt12);
-  double t12var = calVar(currt12);
-
-  std::vector<double> DCPmeanStd = calDCPMeanStd(currdcp);
-  double dcpmean = DCPmeanStd[0];
-  double dcpstd = DCPmeanStd[1];
-
-  unsigned long long int N = currdm221.size();
-  double acdm221,acdm231,act23,act13,act12,acdcp;
-  double normDiv;
-
-  TGraph* tgdm221 = new TGraph();
-  TGraph* tgdm231 = new TGraph();
-  TGraph* tgt23 = new TGraph();
-  TGraph* tgt13 = new TGraph();
-  TGraph* tgt12 = new TGraph();
-  TGraph* tgdcp = new TGraph();
-
-  for(int τ = 1; τ < 251; τ++){
-    normDiv = 1.0/(N-τ);
-    acdm221=0;
-    acdm231=0;
-    act23=0;
-    act13=0;
-    act12=0;
-    acdcp = 0;
-
-    for(unsigned long long int iters = τ; iters < N; iters++){
-      acdm221 += ((currdm221[iters]-dm221mean)*(currdm221[iters-τ]-dm221mean))/(dm221var);
-      acdm231 += ((currdm231[iters]-dm231mean)*(currdm231[iters-τ]-dm231mean))/(dm231var);
-      act23 += ((currt23[iters]-t23mean)*(currt23[iters-τ]-t23mean))/(t23var);
-      act13 += ((currt13[iters]-t13mean)*(currt13[iters-τ]-t13mean))/(t13var);
-      act12 += ((currt12[iters]-t12mean)*(currt12[iters-τ]-t12mean))/(t12var);
-      acdcp += (dcpDIFF(currdcp[iters],dcpmean)*dcpDIFF(currdcp[iters-τ],dcpmean))/(dcpstd*dcpstd);
-
-      //std::cout << acdm221 << " " << (currdm221[iters]-dm221mean)/std::sqrt(dm221var) << " " << (currdm221[iters-τ]-dm221mean)/std::sqrt(dm221var) << "\n";
-      
-    }
-
-    //std::cout << acdm221 << " " <<acdm221*normDiv <<"\n";
- 
-    tgdm221->AddPoint(τ,acdm221*normDiv);
-    tgdm231->AddPoint(τ,acdm231*normDiv);
-    tgt23->AddPoint(τ,act23*normDiv);
-    tgt13->AddPoint(τ,act13*normDiv);
-    tgt12->AddPoint(τ,act12*normDiv);
-    tgdcp->AddPoint(τ,acdcp*normDiv);
-
-    
-    /*if(τ == 1){
-    std::cout << acdm221*normDiv << " " << acdm231*normDiv << " " <<act23*normDiv << " " <<act13*normDiv << " " <<act12*normDiv << " " << acdcp*normDiv << "\n";
-    }*/
-    
- }
-
-  tgdm221->SetTitle("Graph");
-  tgdm231->SetTitle("Graph");
-  tgt23->SetTitle("Graph");
-  tgt13->SetTitle("Graph");
-  tgt12->SetTitle("Graph");
-  tgdcp->SetTitle("Graph");
-  
-  tgdm221->SetMarkerStyle(21);
-  tgdm231->SetMarkerStyle(21);
-  tgt23->SetMarkerStyle(21);
-  tgt13->SetMarkerStyle(21);
-  tgt12->SetMarkerStyle(21);
-  tgdcp->SetMarkerStyle(21);
-
-  
-  tgdm221->SetLineWidth(2);
-  tgdm231->SetLineWidth(2);
-  tgt23->SetLineWidth(2);
-  tgt13->SetLineWidth(2);
-  tgt12->SetLineWidth(2);
-  tgdcp->SetLineWidth(2);
-
-  //std::cout << tgdm221->GetPointY(0) << " " << tgdm231->GetPointY(0) << " " << tgt23->GetPointY(0) << " " << tgt13->GetPointY(0) << " " << tgt12->GetPointY(0) << " " << tgdcp->GetPointY(0) << "\n"; 
-
   
   
-  TCanvas* c1 = new TCanvas("c1","graph",1500,800);
-  tgdm221->Draw("ALP");
-  c1->SaveAs("dm221.pdf");
-
-  tgdm231->Draw("ALP");
-  c1->SaveAs("dm231.pdf");
-
-  tgt23->Draw("ALP");
-  c1->SaveAs("t23.pdf");
-
-  tgt13->Draw("ALP");
-  c1->SaveAs("t13.pdf");
-
-  tgt12->Draw("ALP");
-  c1->SaveAs("t12.pdf");
-
-  tgdcp->Draw("ALP");
-  c1->SaveAs("dcp.pdf");
-
-
-
-
-  delete tgdm221;
-  delete tgdm231;
-  delete tgt23;
-  delete tgt13;
-  delete tgt12;
-  delete tgdcp;
-  delete c1;
-  //delete chain1;
-  
-
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
   std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
 
-
+  int nbinx = 100;
+  int nbiny = 100;
   
+  double T23low = 0.3;
+  double T23high = 0.7;
+
+  double DCPlow = 0;
+  double DCPhigh = 360;
+
+  double T12low = 0.26;
+  double T12high = 0.36;
+
+  double DM221low = 6e-5;
+  double DM221high = 9e-5;
+
+  double T13low = 0.018;
+  double T13high = 0.026;
+
+  double DM232low = -2.7e-3;
+  double DM232high = -2.3e-3;
+
+  double DM231low = 2.3e-3;
+  double DM231high = 2.7e-3;
+
+  TH2D* T23DCP = new TH2D("T23DCP","T23 vs DCP",nbinx,T23low,T23high,nbiny,DCPlow,DCPhigh);
+  TH2D* T23DM232 = new TH2D("T23DM232","T23 vs DM232 (inv)",nbinx,T23low,T23high,nbiny,DM232low,DM232high);
+  TH2D* T23DM231 = new TH2D("T23DM231","T23 vs DM231 (norm)",nbinx,T23low,T23high,nbiny,DM231low,DM231high);
+
+   TH2D* T13DCP = new TH2D("T13DCP","T13 vs DCP",nbinx,T13low,T13high,nbiny,DCPlow,DCPhigh);
+   TH2D* T13DM232 = new TH2D("T13DM232","T13 vs DM232 (inv)",nbinx,T13low,T13high,nbiny,DM232low,DM232high);
+  TH2D* T13DM231 = new TH2D("T13DM231","T13 vs DM231 (norm)",nbinx,T13low,T13high,nbiny,DM231low,DM231high);
+
+  TH2D* T12DM221 = new TH2D("T12DM221","T12 vs DM221",nbinx,T12low,T12high,nbiny,DM221low,DM221high);
+  TH2D* T13DM221 = new TH2D("T13DM221","T13 vs DM221",nbinx,T13low,T13high,nbiny,DM221low,DM221high);
+
+  size_t iterSize = currdm221.size();
+
+  for(int i = 0; i < iterSize; i++){
+    T23DCP->Fill(currt23[i],currdcp[i],1.0/iterSize);
+    T23DM232->Fill(currt23[i],currdm221[i]-currdm231[i],1.0/iterSize);
+    T23DM231->Fill(currt23[i],currdm231[i],1.0/iterSize);
+
+    T13DCP->Fill(currt13[i],currdcp[i],1.0/iterSize);
+    T13DM232->Fill(currt13[i],currdm221[i]-currdm231[i],1.0/iterSize);
+    T13DM231->Fill(currt13[i],currdm231[i],1.0/iterSize);
+
+    T12DM221->Fill(currt12[i],currdm221[i],1.0/iterSize);
+    T13DM221->Fill(currt13[i],currdm221[i],1.0/iterSize);
+
+  }
+
+  TFile* histFile = new TFile("HistFile.root","recreate");
+  T23DCP->Write();
+  T23DM232->Write();
+  T23DM231->Write();
+  T13DCP->Write();
+  T13DM232->Write();
+  T13DM231->Write();
+  T12DM221->Write();
+  T13DM221->Write();
+  histFile->Close();
+
+  TFile* vecFile = new TFile("vectorFile.root","recreate");
+  TTree* tree = new TTree("vecTree", "Tree with all Vectors");
+
+  tree->Branch("dm221",&currdm221);
+  tree->Branch("dm231",&currdm231);
+  tree->Branch("t23",&currt23);
+  tree->Branch("t12",&currt12);
+  tree->Branch("t13",&currt13);
+  tree->Branch("dcp",&currdcp);
+  tree->Fill();
+  tree->Write();
+  vecFile->Close();
   
 
-  
+  //std::vector<double> currdm221, currdm231, currt23, currt12, currt13, currdcp;
 
-
-  std::cout << dm221mean << " " << dm221var << "\n"
-	    << dm231mean << " " << dm231var << "\n"
-	    << t23mean << " " << t23var << "\n"
-	    << t13mean << " " << t13var << "\n"
-	    << t12mean << " " << t12var << "\n"
-	    << dcpmean << " " << dcpstd << "\n";
-    
-
-  /*std::vector<double> xVals;
-  xVals.reserve(numSize);
-  for(int i = 0; i < numSize; i++) xVals[i] = i;
-
-  
 
   TCanvas* c1 = new TCanvas("c1","graph",1500,800);
-  tg->Draw("ALP");*/
-  
+  T23DCP->Draw("COLZ");
+  c1->SaveAs("t23_v_dcp.pdf");
+
+  T23DM232->Draw("COLZ");
+  c1->SaveAs("t23_v_dm232.pdf");
+
+  T23DM231->Draw("COLZ");
+  c1->SaveAs("t23_v_dm231.pdf");
+
+  T13DCP->Draw("COLZ");
+  c1->SaveAs("t13_v_dcp.pdf");
+
+  T13DM232->Draw("COLZ");
+  c1->SaveAs("t13_v_dm232.pdf");
+
+  T13DM231->Draw("COLZ");
+  c1->SaveAs("t13_v_dm231.pdf");
+
+  T12DM221->Draw("COLZ");
+  c1->SaveAs("t12_v_dm221.pdf");
+
+  T13DM221->Draw("COLZ");
+  c1->SaveAs("t13_v_dm221.pdf");
 
   
+
+
+
+  delete T23DCP;
+  delete T23DM232;
+  delete T23DM231;
+  delete T13DCP;
+  delete T13DM232;
+  delete T13DM231;
+  delete T12DM221;
+  delete T13DM221;
+  delete c1;
   
+  
+  
+
   
   return 0;
 }
