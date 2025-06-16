@@ -1,0 +1,135 @@
+#include "libra.h"
+
+static constexpr double E = 1e-5;
+
+libra::libra(){
+
+
+  dfN1 = new NuFuncs(0,"N1");
+  dfN4 = new NuFuncs(0,"N4");
+  dfN17 = new NuFuncs(0,"N17");
+
+  dfI1 = new NuFuncs(1,"I1");
+  dfI4 = new NuFuncs(1,"I4");
+  dfI17 = new NuFuncs(1,"I17");
+  
+  dfN1->putIntoDF("normalOrder.txt",1);
+  dfN4->putIntoDF("normalOrder.txt",4);
+  dfN17->putIntoDF("normalOrder.txt",17);
+    
+  oneND = dfN17->oneDI();
+  twoND = dfN4->twoDI();
+  dfN1->kDTree();
+  
+  dfI1->putIntoDF("invertedOrder.txt",1);
+  dfI4->putIntoDF("invertedOrder.txt",4);
+  dfI17->putIntoDF("invertedOrder.txt",17);
+    
+  oneID = dfI17->oneDI();
+  twoID = dfI4->twoDI();
+  dfI1->kDTree();
+
+  int threeSizeN = dfN1->xData.size();
+  int twoSize = dfN4->xData.size();
+  int oneSize = dfN17->xData.size();
+
+  int threeSizeI = dfI1->xData.size();
+    
+  T23min = dfN1->xData[0];
+  T23max = dfN1->xData[threeSizeN-1];
+  
+  DCPmin = -180;
+  DCPmax = 180;
+  
+  DMAminN = dfN1->yData[0];
+  DMAmaxN = dfN1->yData[threeSizeN-1];
+  DMAminI = dfI1->yData[0];
+  DMAmaxI = dfI1->yData[threeSizeI-1];
+  
+
+  T13min = dfN17->xData[0];
+  T13max = dfN17->xData[oneSize-1];
+  
+  T12min = dfN4->xData[0];
+  T12max = dfN4->xData[twoSize-1];
+  
+  DMSmin = dfN4->yData[0];
+  DMSmax = dfN4->yData[twoSize-1];
+  
+}
+
+double snap(double val, double min, double max){
+  if(std::abs(val-min) <= E) return min;
+  if(std::abs(max-val) <= E) return max;
+  return val;
+}
+
+
+double libra::getChiSquare(double dm221,double dm231,double t12,double t13,double t23,double dcpval){ //assumed order
+
+  double dm231S = dm231 * 1000;
+  double dm232S = (dm231 - dm221)*1000;
+  double dm221S = log10(dm221);
+  
+  bool dm221Flag = ((dm221S > DMSmin - E) && (dm221S < DMSmax + E));
+  
+  bool dm231Flag = ((dm231S > DMAminN - E) && (dm231S < DMAmaxN + E)); // && (dm231S > 0)
+  bool dm232Flag = ((dm232S > DMAminI - E) && (dm232S < DMAmaxI + E)); //&& (dm232S < 0)
+  
+  bool t12Flag = ((t12 > T12min - E) && (t12 < T12max + E));
+  bool t13Flag = ((t13 > T13min - E) && (t13 < T13max + E));
+  bool t23Flag = ((t23 > T23min - E) && (t23 < T23max + E));
+
+  bool dcpFlag = ((dcpval > DCPmin - E) && (dcpval < DCPmax + E));
+
+  bool NFlag = (t23Flag && dm231Flag && dcpFlag && t12Flag && dm221Flag && t13Flag);
+  bool IFlag = (t23Flag && dm232Flag && dcpFlag && t12Flag && dm221Flag && t13Flag);
+
+  /*std::cout << t23Flag << dm231Flag << dcpFlag << t12Flag << dm221Flag << t13Flag << "\n";
+    std::cout << NFlag << IFlag << "\n";*/
+  
+  if(NFlag){
+
+    dm231S=snap(dm231S,DMAminN,DMAmaxN);
+    t23=snap(t23,T23min,T23max);
+    t12=snap(t12,T12min,T12max);
+    t13=snap(t13,T13min,T13max);
+    dm221S=snap(dm221S,DMSmin,DMSmax);
+    
+    double dpthree[3] = {t23,dm231S,dcpval};    
+    return  minN + (dfN1->threeDI(dpthree) - minN) + (twoND->Interpolate(t12,dm221S)-minN) + (oneND->Eval(t13) - minN);
+    
+  }
+
+  if(IFlag){
+
+     dm231S=snap(dm231S,DMAminN,DMAmaxN);
+    t23=snap(t23,T23min,T23max);
+    t12=snap(t12,T12min,T12max);
+    t13=snap(t13,T13min,T13max);
+    dm221S=snap(dm221S,DMSmin,DMSmax);
+    
+    double dpthree[3] = {t23,dm232S,dcpval};
+    std::cout << dm232S << "\n";
+    return minI + (dfI1->threeDI(dpthree) - minI) + (twoID->Interpolate(t12,dm221S)-minI) + (oneID->Eval(t13) - minI);
+  }
+
+  return -999999;
+
+  
+}
+
+libra::~libra(){
+    delete oneID;
+    delete twoID;
+    delete oneND;
+    delete twoND;
+    delete dfN1;
+    delete dfN4;
+    delete dfN17;
+    delete dfI1;
+    delete dfI4;
+    delete dfI17;
+}
+
+

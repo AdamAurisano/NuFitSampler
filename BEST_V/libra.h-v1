@@ -1,0 +1,47 @@
+#pragma once
+#include "NuFuncs.h"
+
+class libra{
+ public:
+
+  NuFuncs* dfN1 = nullptr;
+  NuFuncs* dfN4 = nullptr;
+  NuFuncs* dfN17 = nullptr;
+  NuFuncs* dfI1 = nullptr;
+  NuFuncs* dfI4 = nullptr;
+  NuFuncs* dfI17 = nullptr;
+  
+  
+  ROOT::Math::Interpolator* oneND = nullptr;
+  TGraph2D* twoND = nullptr;
+
+  ROOT::Math::Interpolator* oneID = nullptr;
+  TGraph2D* twoID = nullptr;
+
+  double T23min;
+  double T23max;
+  
+  double DCPmin;
+  double DCPmax;
+  
+  double DMAminN;
+  double DMAmaxN;
+  double DMAminI;
+  double DMAmaxI;
+  
+  double T13min;
+  double T13max;
+  
+  double T12min;
+  double T12max;
+  
+  double DMSmin;
+  double DMSmax;
+
+  libra();
+  double getChiSquare(double,double,double,double,double,double);
+  ~libra();
+
+
+
+};

@@ -1,0 +1,70 @@
+#pragma once
+#include <iostream>
+#include <string>
+#include <vector>
+#include "TKDTree.h"
+#include <fstream>
+#include <iomanip>
+#include <Math/Interpolator.h>
+#include <Math/InterpolationTypes.h>
+#include <TCanvas.h>
+#include <TGraph2D.h>
+#include <algorithm>
+#include <cmath>
+
+static double minN = 0.59125531;
+static double minI = 0;
+
+class NuFuncs {
+
+  private:
+  
+  std::vector<double> dcp = {-180,-175,-170,-165,-160,-155,-150,-145,-140,-135,-130,-125,-120,-115,-110,-105,-100,-95,-90,-85,-80,-75,-70,-65,-60,-55,-50,-45,-40,-35,-30,-25,-20,-15,-10,-5,-0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175};
+  
+  std::vector<double> t23 = {0.25,0.255,0.26,0.265,0.27,0.275,0.28,0.285,0.29,0.295,0.3,0.305,0.31,0.315,0.32,0.325,0.33,0.335,0.34,0.345,0.35,0.355,0.36,0.365,0.37,0.375,0.38,0.385,0.39,0.395,0.4,0.405,0.41,0.415,0.42,0.425,0.43,0.435,0.44,0.445,0.45,0.455,0.46,0.465,0.47,0.475,0.48,0.485,0.49,0.495,0.5,0.505,0.51,0.515,0.52,0.525,0.53,0.535,0.54,0.545,0.55,0.555,0.56,0.565,0.57,0.575,0.58,0.585,0.59,0.595,0.6,0.605,0.61,0.615,0.62,0.625,0.63,0.635,0.64,0.645,0.65,0.655,0.66,0.665,0.67,0.675,0.68,0.685,0.69,0.695,0.7,0.705,0.71,0.715,0.72,0.725,0.73,0.735,0.74,0.745,0.75};
+  
+  std::vector<double> dma;
+  int DCPsize;
+  float DMAmin;  
+  
+  TKDTreeID* tree;
+  double* dataT23;
+  double* dataDMA;
+  double* dataDCP;
+
+  std::string ID;
+  
+public:
+  
+  std::vector<double> xData;
+  std::vector<double> yData;
+  std::vector<double> zData;
+  std::vector<double> chiSq;
+  std::vector<std::string> column_names;
+
+  static constexpr float T23min = 0.25;
+  static constexpr float DCPmin = -180;
+  static constexpr float T23dist = 0.5;
+  static constexpr float DMAdist = 6.8;
+  static constexpr float DCPdist = 355;
+  
+
+  
+  NuFuncs(bool,std::string);
+  
+  double read(int index){
+    return dcp[(index%DCPsize + DCPsize)%DCPsize];
+  } 
+  void putIntoDF(std::string file_addy, int secnum);
+  ROOT::Math::Interpolator* oneDI(); //ADD BOUND CHECK
+  TGraph2D* twoDI();  //ADD BOUND CHECK
+  void remDCP();
+  void scale();
+  void scale(double*);
+  void kDTree();
+  double threeDI(double*);  
+  
+  ~NuFuncs();
+
+
+};

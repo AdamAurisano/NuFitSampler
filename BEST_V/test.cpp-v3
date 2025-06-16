@@ -1,0 +1,129 @@
+#include "NuFuncs.h"
+#include "libra.h"
+#include <iostream>
+#include <chrono>
+#include <mutex>
+#include <vector>
+#include <cmath>
+
+#include "TGraph2D.h"
+#include "TCanvas.h"
+#include "TApplication.h"
+#include "TH2D.h"
+#include "TGraph.h"
+#include "TFile.h"
+
+int main(int argc, char** argv){
+  std::mutex interp_mutex;
+  auto start = std::chrono::high_resolution_clock::now();
+  
+  libra obj1;
+  NuFuncs df2(0, "14");
+  df2.putIntoDF("normalOrder.txt", 7);
+  
+  TGraph2D* G = new TGraph2D(df2.xData.size(), &df2.xData[0], &df2.yData[0], &df2.chiSq[0]);
+  
+  constexpr int nbinx = 25;
+  constexpr int nbiny = 25;
+  constexpr double xlow = 0.42, xhigh = 0.6;
+  constexpr double ylow = 2.45, yhigh = 2.62;
+  
+  TH2D* T2Dplot = new TH2D("T2DPlot", "T23 vs DMA normorder 2D", nbinx, xlow, xhigh, nbiny, ylow, yhigh);
+  TH2D* T3Dplot = new TH2D("T3DPlot", "T23 vs DMA normorder 3D", nbinx, xlow, xhigh, nbiny, ylow, yhigh);
+  
+  double* xbinList = new double[nbinx];
+  double* ybinList = new double[nbiny];
+  for (int i = 0; i < nbinx; i++) xbinList[i] = T2Dplot->GetXaxis()->GetBinCenter(i + 1);
+  for (int i = 0; i < nbiny; i++) ybinList[i] = T2Dplot->GetYaxis()->GetBinCenter(i + 1);
+  
+  std::vector<double> DCP = {165,170,175,180,-180,-175,-165};
+  std::vector<double> T12;
+  std::vector<double> T13;
+  std::vector<double> DM221;
+  //  for (int dcp = -1; dcp <= 180; dcp += 5) DCP.push_back(dcp);
+  for (double t12 = 0.28; t12 <= 0.35; t12 += 0.005) T12.push_back(t12);
+  for (double t13 = 0.021; t13 <= 0.023; t13 += 0.0001) T13.push_back(t13);    
+  for (double dm221 = -4.15; dm221 <= -4.1; dm221 += 0.002) DM221.push_back(std::pow(10,dm221));
+  
+  
+  std::cout << DCP.size() << " " << T12.size() << " " << DM221.size() << " " << T13.size() << "\n";
+  
+  std::cout << "Total Calculations: " << DCP.size() * T12.size() * DM221.size() * T13.size()* nbinx * nbiny << std::endl;
+    
+#pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int i = 0; i < nbinx; i++) {
+      for (int j = 0; j < nbiny; j++) {
+	double t23Val = xbinList[i];
+	double dm231Val = ybinList[j] * 1e-3;
+	
+	double val;
+	{
+	  std::lock_guard<std::mutex> lock(interp_mutex);
+	  val = G->Interpolate(xbinList[i], ybinList[j]);
+	}
+	
+#pragma omp critical
+	T2Dplot->SetBinContent(i + 1, j + 1, val);
+	
+	double minChi = 1e6;
+	for (double dcpVal : DCP) {
+	  for (double dm221Val : DM221) {
+	    for (double t13Val : T13) {
+	      for (double t12Val : T12) {
+		double ChiSq = obj1.getChiSquare(dm221Val, dm231Val, t12Val, t13Val, t23Val, dcpVal);
+		if (ChiSq == -999999) {
+#pragma omp critical
+		  std::cout << dm221Val << "," << dm231Val << "," << t12Val << "," << t13Val << "," << t23Val << "," << dcpVal << "\n";
+		  continue;
+		}
+		if (ChiSq < minChi) minChi = ChiSq;
+	      }
+	    }
+	  }
+	}
+	
+#pragma omp critical
+	{
+	  T3Dplot->SetBinContent(i + 1, j + 1, minChi);
+	  std::cout << "[" << minChi << " " << i << " " << j << "] ";
+	}
+      }
+    }
+  
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+  
+  T2Dplot->GetXaxis()->SetTitle("T23");
+  T2Dplot->GetYaxis()->SetTitle("DMA");
+  T3Dplot->GetXaxis()->SetTitle("T23");
+  T3Dplot->GetYaxis()->SetTitle("DMA");
+  
+  TFile* file2D = new TFile("2DOutput.root", "recreate");
+  T2Dplot->Write();
+  file2D->Close();
+  
+  TFile* file3D = new TFile("3DOutput.root", "recreate");
+  T3Dplot->Write();
+  file3D->Close();
+  
+  TApplication app("app", &argc, argv);
+  TCanvas* c2D = new TCanvas("Graph2D", "Fit2D", 600, 600);
+  T2Dplot->Draw("COLZ");
+  c2D->Update();
+  
+  TCanvas* c3D = new TCanvas("Graph3D", "Fit3D", 600, 600);
+  T3Dplot->Draw("COLZ");
+  c3D->Update();
+
+  delete G;
+  delete xbinList;
+  delete ybinList;
+  
+  app.Run();
+  
+  delete T2Dplot;
+  delete T3Dplot;
+  
+  return 0;
+}

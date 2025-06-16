@@ -1,0 +1,447 @@
+#include "NuFuncs.h"
+
+NuFuncs::NuFuncs() {}
+
+void NuFuncs::putIntoDF(std::string file_addy, int secnum) {
+  std::ifstream datafile(file_addy);
+  if (!datafile) {
+    std::cerr << "Error opening file" << std::endl;
+    return;
+  }
+  
+  std::string line;
+  int section = 0;
+  std::string sub = "projection:";
+  while (getline(datafile, line)) {
+    if (line.empty()) continue;
+    
+    size_t start = line.find_first_not_of(" ");
+    size_t end = line.find_last_not_of(" ");
+    if (start != std::string::npos && end != std::string::npos) {
+      line = line.substr(start, end - start + 1);
+    }
+    size_t pos;
+    while ((pos = line.find("  ")) != std::string::npos) {
+      line.erase(pos, 1);
+    }
+    
+    int col_length;
+    if (line[0] == '#' && line[1] != '#') {
+      section++;
+      
+      if (section == secnum) {
+	int pos = line.find(sub);
+	if (pos != std::string::npos) {
+	  line = line.substr(1, pos - 1);
+	  size_t col_pos = 0;
+	  size_t prev_col_pos = 0;
+	  column_names.clear();
+	  while ((col_pos = line.find("/", prev_col_pos)) != std::string::npos) {
+	    column_names.push_back(line.substr(prev_col_pos, col_pos - prev_col_pos));
+	    prev_col_pos = col_pos + 1;
+ 
+	  }
+	  column_names.push_back(line.substr(prev_col_pos));
+	  col_length = column_names.size();
+
+	  //std::cout << column_names[0] << column_names[1] << std::endl;
+	}
+      }
+      
+      continue;
+    }
+    
+    if (section == secnum) {
+      
+      std::cout << std::setprecision(8);
+      std::vector<float> tokens;
+      tokens.reserve(col_length);
+      
+      size_t prev_pos = 0, pos = 0;
+      while ((pos = line.find(" ", prev_pos)) != std::string::npos) {
+	tokens.push_back(std::stof(line.substr(prev_pos, pos - prev_pos)));
+	prev_pos = pos + 1;
+      }
+      tokens.push_back(std::stof(line.substr(prev_pos)));
+      //std::cout << "Check1\n";
+
+     
+      switch (col_length) {
+      case 3:
+	//std::cout << "Case3\n";
+	xData.push_back(tokens[0]);
+	yData.push_back(tokens[1]);
+	zData.push_back(tokens[2]);
+	chiSq.push_back(tokens[3]);
+	break;
+	
+      case 2:
+	//std::cout << "Case2\n";
+	xData.push_back(tokens[0]);
+	yData.push_back(tokens[1]);
+	chiSq.push_back(tokens[2]);
+	break;
+	
+      case 1:
+	//std::cout << "Case1\n";
+	xData.push_back(tokens[0]);
+	chiSq.push_back(tokens[1]);
+	break;
+	
+      default:
+	break;
+      }
+    }
+  }
+}
+
+ROOT::Math::Interpolator* NuFuncs::oneDI(){
+
+  ROOT::Math::Interpolator* inter = new ROOT::Math::Interpolator(xData,chiSq,ROOT::Math::Interpolation::Type::kCSPLINE);
+  //double chiT = inter.Eval(xData[i]);
+
+  return inter;
+
+   //ADD BOUND CHECK
+
+}
+
+TGraph2D* NuFuncs::twoDI(){
+  TGraph2D* G = new TGraph2D(xData.size(), &(xData[0]),&(yData[0]),&(chiSq[0]));
+  //std::cout << G->Interpolate(0.170,-6);
+  //double err = G->Interpolate(xData[i],yData[i]);
+  return G;
+
+   //ADD BOUND CHECK
+}
+
+void NuFuncs::remDCP(){
+  std::vector<double> xNew, yNew, zNew, chiNew;
+  
+  for (size_t i = 0; i < zData.size(); ++i) {
+    if (zData[i] != 180) {
+      xNew.push_back(xData[i]);
+      yNew.push_back(yData[i]);
+      zNew.push_back(zData[i]);
+      chiNew.push_back(chiSq[i]);
+    }
+  }
+  
+  xData = std::move(xNew);
+  yData = std::move(yNew);
+  zData = std::move(zNew);
+  chiSq = std::move(chiNew);
+}
+
+void NuFuncs::scale(){
+
+  remDCP();
+
+  int size = xData.size();
+    
+  datax = new double[size];
+  datay = new double[size];
+  dataz = new double[size];
+
+
+  for(int i = 0; i< xData.size(); i++){
+    datax[i] = (xData[i]-xmin)/xdist;
+    datay[i] = (yData[i]-ymin)/ydist;
+    dataz[i] = (zData[i]-zmin)/zdist;
+  }
+
+}
+
+void NuFuncs::scale(double* dptr){
+  dptr[0] = (dptr[0]-xmin)/xdist;
+  dptr[1] = (dptr[1]-ymin)/ydist;
+  dptr[2] = (dptr[2]-zmin)/zdist;
+}
+
+/*void NuFuncs::unscale(double* dptr){
+  dptr[0] = xdist*dptr[0] + xmin;
+  dptr[1] = ydist*dptr[1] + ymin;
+  dptr[2] = zdist*dptr[2] + zmin;
+  }*/
+
+void NuFuncs::kDTree(){
+  scale();
+  
+  tree = new TKDTreeID(xData.size(),3,1);
+  
+
+  tree->SetData(0,datax);
+  tree->SetData(1,datay);
+  tree->SetData(2,dataz);
+  tree->Build();
+  tree->SetOwner(kTRUE);
+  
+}
+
+double NuFuncs::threeDI(double* dptr){
+  if((dptr[0] < t23[0]) || (dptr[1] < dma[0])) return -100000;
+
+  if(std::abs(dptr[2] - 180) <= 1e-5) dptr[2] = -180;
+
+
+  //assumes data alr refined CALL KDTREE BEFORE THIS
+  auto lbx = lower_bound(t23.begin(),t23.end(),dptr[0]);
+  auto lby = lower_bound(dma.begin(),dma.end(),dptr[1]);
+  auto lbz = lower_bound(dcp.begin(),dcp.end(),dptr[2]);
+  int Dindex = lbz-dcp.begin();
+  
+
+  bool xTrue = (*lbx - dptr[0] <= 1e-5);
+  bool yTrue = (*lby - dptr[1] <= 1e-5);
+  bool zTrue = (std::abs(read(Dindex) - dptr[2]) <= 1e-5);
+
+  int flag = (xTrue << 2) | (yTrue << 1) | zTrue;
+  
+  //std::cout <<*lbx - dptr[0] << " " << *lby - dptr[1]<< " "<< read(Dindex) - dptr[2] <<"\n";
+  //std::cout << xTrue << yTrue << zTrue << "\n";
+  //if(dist[0] < 1e-5)return chiSq[ind[0]];
+
+  int* ind = new int[1];;
+  double* dist = new double[1];
+  std::vector<double> gridChi = {};
+  //gridChi.resize(8);
+  std::vector<std::vector<double>> pointVec = {};
+  //pointVec.resize(8); DO IF SLOWS DOWN LATER
+  double* point = new double[3];
+  
+  double ChiValue = 0;
+  double chiX1, chiX2,chiX3,chiX4,chiY1,chiY2 = 0;
+
+  double x,x0,x1,y,y0,y1,z,z0,z1 = 0;
+
+  double xd,yd,zd = 0;
+  //std::cout << "check2\n";
+  
+  switch(flag){
+  case 7: //exact point
+    //std::cout << "check7\n";
+    point[0] = dptr[0];
+    point[1] = dptr[1];
+    point[2] = read(Dindex);
+    //std::cout << "check3\n";
+    scale(point);
+    tree->FindNearestNeighbors(point,1,ind,dist);
+    ChiValue = chiSq[ind[0]];
+    
+    break;
+  case 6: // x & y
+    std::cout << "check6\n";
+    point[0] = dptr[0];
+    point[1] = dptr[1];
+    for(int i = 0; i < 2; i++){
+      point[2] = read(Dindex - i);
+      pointVec.push_back({point[0],point[1],point[2]});
+      scale(point);
+      tree->FindNearestNeighbors(point,1,ind,dist);
+      gridChi.push_back(chiSq[ind[0]]);
+      //std::cout << pointVec[0][2] << "\n";
+    }
+    
+    x = dptr[2];
+    y0 = gridChi[1];
+    y1 = gridChi[0];
+    x0 = pointVec[1][2];
+    x1 = pointVec[0][2];
+
+    //std::cout << x0 << " " << y0 << "\n";
+    //std::cout << x1 << " " << y1 << "\n";
+    ChiValue = y0*(x1-x)/(x1-x0) + y1*(x-x0)/(x1-x0);
+    
+    break;
+  case 5: // x & z
+    //std::cout << "check5\n";
+    point[0] = dptr[0];
+    point[2] = dptr[2];
+    for(int i = 0; i < 2; i++){
+      point[1] = *(lby-i);
+      pointVec.push_back({point[0],point[1],point[2]});
+      scale(point);
+      tree->FindNearestNeighbors(point,1,ind,dist);
+      gridChi.push_back(chiSq[ind[0]]);
+    }
+
+    x = dptr[1];
+    y0 = gridChi[1];
+    y1 = gridChi[0];
+    x0 = pointVec[1][1];
+    x1 = pointVec[0][1];
+
+    ChiValue = y0*(x1-x)/(x1-x0) + y1*(x-x0)/(x1-x0);
+
+    break;
+  case 4: // x
+    //std::cout << "check4\n";
+    point[0] = dptr[0];
+    
+    for(int i = 0; i < 2; i++){
+      for(int j = 0; j < 2; j++){
+	point[1] = *(lby - i);
+	point[2] = read(Dindex - j);
+	pointVec.push_back({point[0],point[1],point[2]});
+	scale(point);
+	tree->FindNearestNeighbors(point,1,ind,dist);
+	gridChi.push_back(chiSq[ind[0]]);
+      }
+    }
+
+    x = dptr[1];
+    y = dptr[2];
+    x0 = pointVec[3][1];
+    x1 = pointVec[0][1];
+    y0 = pointVec[3][2];
+    y1 = pointVec[0][2];
+
+    
+    chiX1 = gridChi[3]*(x1-x)/(x1-x0) + gridChi[1]*(x-x0)/(x1-x0);
+    chiX2 = gridChi[2]*(x1-x)/(x1-x0) + gridChi[0]*(x-x0)/(x1-x0);
+
+    ChiValue = chiX1*(y1-y)/(y1-y0) + chiX2*(y-y0)/(y1-y0);    
+    
+    break;
+  case 3: // y & z
+    //std::cout << "check3\n";
+    point[1] = dptr[1];
+    point[2] = dptr[2];
+    for(int i = 0; i < 2; i++){
+      point[0] = *(lbx-i);
+      pointVec.push_back({point[0],point[1],point[2]});
+      scale(point);
+      tree->FindNearestNeighbors(point,1,ind,dist);
+      gridChi.push_back(chiSq[ind[0]]);
+      //pointVec.push_back(point);
+    }
+
+    x = dptr[0];
+    y0 = gridChi[1];
+    y1 = gridChi[0];
+    x0 = pointVec[1][0];
+    x1 = pointVec[0][0];
+
+    ChiValue = y0*(x1-x)/(x1-x0) + y1*(x-x0)/(x1-x0);
+    
+    break;
+  case 2: // y
+    //std::cout << "check2\n";
+    point[1] = dptr[1];
+    //count = 0;
+    
+    for(int i = 0; i < 2; i++){
+      for(int j = 0; j < 2; j++){
+	point[0] = *(lbx - i);
+	point[2] = read(Dindex - j);
+	pointVec.push_back({point[0],point[1],point[2]});
+	scale(point);
+	tree->FindNearestNeighbors(point,1,ind,dist);
+	gridChi.push_back(chiSq[ind[0]]);
+	//pointVec.push_back(point);
+      }
+    }
+
+    x = dptr[0];
+    y = dptr[2];
+    x0 = pointVec[3][0];
+    x1 = pointVec[0][0];
+    y0 = pointVec[3][2];
+    y1 = pointVec[0][2];
+
+    
+    chiX1 = gridChi[3]*(x1-x)/(x1-x0) + gridChi[1]*(x-x0)/(x1-x0);
+    chiX2 = gridChi[2]*(x1-x)/(x1-x0) + gridChi[0]*(x-x0)/(x1-x0);
+
+    ChiValue = chiX1*(y1-y)/(y1-y0) + chiX2*(y-y0)/(y1-y0);
+    
+    break;
+  case 1: // z
+    //std::cout << "check1\n";
+    point[2] = dptr[2];
+    //count = 0;
+    
+    for(int i = 0; i < 2; i++){
+      for(int j = 0; j < 2; j++){
+	point[0] = *(lbx - i);
+	point[1] = *(lby - j);
+	pointVec.push_back({point[0],point[1],point[2]});
+	scale(point);
+	tree->FindNearestNeighbors(point,1,ind,dist);
+	gridChi.push_back(chiSq[ind[0]]);
+      }
+    }
+
+    x = dptr[0];
+    y = dptr[1];
+    x0 = pointVec[3][0];
+    x1 = pointVec[0][0];
+    y0 = pointVec[3][1];
+    y1 = pointVec[0][1];
+
+    
+    chiX1 = gridChi[3]*(x1-x)/(x1-x0) + gridChi[1]*(x-x0)/(x1-x0);
+    chiX2 = gridChi[2]*(x1-x)/(x1-x0) + gridChi[0]*(x-x0)/(x1-x0);
+
+    ChiValue = chiX1*(y1-y)/(y1-y0) + chiX2*(y-y0)/(y1-y0);
+    
+    break;
+  case 0: // triLinear
+    //std::cout << "check0\n";
+   
+    
+    for(int i = 0; i<2;i++){
+      for(int j = 0; j<2;j++){
+	for(int k = 0; k<2; k++){
+	  point[0] = *(lbx-i);
+	  point[1] = *(lby-j);
+	  point[2] = read(Dindex-k);
+	  pointVec.push_back({point[0],point[1],point[2]});
+	  scale(point);
+	  tree->FindNearestNeighbors(point,1,ind,dist);
+	  gridChi.push_back(chiSq[ind[0]]);
+	}
+	
+      }
+      
+    }
+    x = dptr[0];
+    y = dptr[1];
+    z = dptr[2];
+    x0 = pointVec[7][0];
+    y0 = pointVec[7][1];
+    z0 = pointVec[7][2];    
+    x1 = pointVec[0][0];
+    y1 = pointVec[0][1];
+    z1 = pointVec[0][2];
+
+    xd = (x-x0)/(x1-x0);
+    yd = (y-y0)/(y1-y0);
+    zd = (z-z0)/(z1-z0);
+
+    chiX1 = gridChi[7]*(1-xd) + gridChi[3]*xd;
+    chiX2 = gridChi[6]*(1-xd) + gridChi[2]*xd;
+    chiX3 = gridChi[5]*(1-xd) + gridChi[1]*xd;
+    chiX4 = gridChi[4]*(1-xd) + gridChi[0]*xd;
+
+    chiY1 = chiX1*(1-yd) + chiX3*yd;
+    chiY2 = chiX2*(1-yd) + chiX4*yd;
+
+    ChiValue = chiY1*(1-zd) + chiY2*zd;
+  
+    break;
+
+  }
+
+  //std::cout << "check4\n";
+
+  delete[] point;
+  delete[] ind;
+  delete[] dist;
+  return ChiValue;
+  
+}
+
+NuFuncs::~NuFuncs(){
+  if(tree) delete tree;
+}
