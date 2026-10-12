@@ -1,0 +1,6 @@
+build/
+data/nufit/
+results/
+__pycache__/
+*~
+\#*#
